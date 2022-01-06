@@ -1,0 +1,437 @@
+---
+title: "Final Project"
+author: "David L. Parks"
+date: "12/12/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+# import libraries
+library(car)
+library(caret)
+library(tidyverse)
+
+# set options
+knitr::opts_chunk$set(echo = TRUE)
+options(show.signif.stars=TRUE)
+
+# set seed for reproducibility
+set.seed(39)
+```
+
+
+```{r}
+# load the data
+combine_draft_data <- read_csv("combine_draft_data_2021.csv",
+                               show_col_types = FALSE)
+
+# take an initial look at the data and note the number of NAs in each column
+summary(combine_draft_data)
+```
+
+
+```{r}
+# standardize the position abbreviations between college position and draft position
+
+# replace "FS" with "S"
+combine_draft_data$college_position[combine_draft_data$college_position == "FS"] <- "S"
+
+# replace "SS" with "S"
+combine_draft_data$college_position[combine_draft_data$college_position == "SS"] <- "S"
+
+# replace "ILB" with "LB"
+combine_draft_data$college_position[combine_draft_data$college_position == "ILB"] <- "LB"
+
+# replace "OLB" with "LB"
+combine_draft_data$college_position[combine_draft_data$college_position == "OLB"] <- "LB"
+```
+
+
+```{r}
+# create a factor column for drafted and undrafted
+combine_draft_data <- combine_draft_data %>% 
+  mutate(drafted = if_else(selection > 0, "drafted", "undrafted"))
+combine_draft_data$drafted <- as.factor(combine_draft_data$drafted)
+combine_draft_data$drafted <- relevel(combine_draft_data$drafted, "undrafted")
+
+# convert college_position to a factor
+combine_draft_data$college_position <- as.factor(combine_draft_data$college_position)
+
+# create a column for 'selection' as a factor
+combine_draft_data$selection_fac <- as_factor(combine_draft_data$selection)
+
+# create a list of independent variables for later use
+col_names <- colnames(combine_draft_data)
+col_names <- col_names[c(4:11)]
+```
+
+
+```{r}
+# look at the distributions of the NFL combine results for drafted vs undrafted
+# players
+for (i in col_names) {
+  print(
+  ggplot(data = combine_draft_data) +
+    geom_density(mapping = aes_string(x = i, fill = "drafted", color = "drafted"),
+                 alpha = 0.1) +
+    scale_color_manual(values = c("#003f5c", "#bc5090")) +
+    scale_fill_manual(values = c("#003f5c", "#bc5090")) +
+    labs(
+      x = paste("Metric =", i),
+      title = "Comparison of Drafted vs Undrafted NFL Players",
+      color = "Status",
+      fill = "Status")
+  )
+}
+```
+
+
+```{r}
+# for each position, look at the distributions of the NFL combine results for
+# drafted vs undrafted players
+for (i in col_names) {
+  print(
+  ggplot(data = combine_draft_data) +
+    geom_boxplot(mapping = aes_string(x = "college_position", y = i, color = "drafted",
+                                      fill = "drafted"), alpha = 0.2) +
+    scale_color_manual(values = c("#003f5c", "#bc5090")) +
+    scale_fill_manual(values = c("#003f5c", "#bc5090")) +
+    labs(
+      x = "Position",
+      title = "Comparison of Drafted vs Undrafted NFL Players",
+      color = "Status",
+      fill = "Status")
+  )
+}
+```
+
+
+```{r}
+# look at the distributions of the NFL combine results by draft round, 1-7
+# indicates the draft round and 0 indicates undrafted
+for (i in col_names) {
+  print(
+  ggplot(data = combine_draft_data) +
+    geom_boxplot(mapping = aes_string(x = "selection_fac", y = i, color = "selection_fac",
+                                      fill = "selection_fac"), alpha = 0.2) +
+    scale_color_manual(values = c("#ffa600", "#003f5c", "#2f4b7c", "#665191",
+                                  "#a05195", "#d45087", "#f95d6a", "#ff7c43")) +
+    scale_fill_manual(values = c("#ffa600", "#003f5c", "#2f4b7c", "#665191",
+                                 "#a05195", "#d45087", "#f95d6a", "#ff7c43")) +
+    labs(
+      x = "Draft Round (0 = Undrafted)",
+      title = "Comparison of Drafted vs Undrafted NFL Players",
+      color = "Draft Round",
+      fill = "Draft Round")
+  )
+}
+```
+
+
+```{r}
+# for each position, look at the distributions of the NFL combine results by
+# draft round, 1-7 indicates the draft round and 0 indicates undrafted
+for (position in sort(unique(combine_draft_data$college_position))) {
+  position_only <- combine_draft_data %>% filter(college_position == position)
+  
+  for (i in col_names) {
+    print(
+      ggplot(data = position_only) +
+        geom_boxplot(mapping = aes_string(x = "selection_fac", y = i, color = "selection_fac",
+                                          fill = "selection_fac"), alpha = 0.2) +
+        scale_color_manual(values = c("#ffa600", "#003f5c", "#2f4b7c", "#665191",
+                                      "#a05195", "#d45087", "#f95d6a", "#ff7c43")) +
+        scale_fill_manual(values = c("#ffa600", "#003f5c", "#2f4b7c", "#665191",
+                                     "#a05195", "#d45087", "#f95d6a", "#ff7c43")) +
+        labs(
+          x = "Draft Round (0 = Undrafted)",
+          title = "Comparison of Drafted vs Undrafted NFL Players",
+          subtitle = paste("Position =", position),
+          color = "Draft Round",
+          fill = "Draft Round")
+    )
+  }
+}
+```
+
+
+```{r}
+# conduct t-tests to determine if there is a statistically significant difference
+# between the mean NFL combine performance metrics of drafted players vs undrafted
+# players
+
+# Ho: no difference in means between undrafted vs drafted players
+# Ha: there is a difference in means between undrafted and drafted players
+
+# height
+t.test(height ~ drafted, data = combine_draft_data, alternative = "two.sided")
+
+# weight
+t.test(weight ~ drafted, data = combine_draft_data, alternative = "two.sided")
+
+# 40yd dash
+t.test(forty_yd ~ drafted, data = combine_draft_data, alternative = "greater")
+
+# bench
+t.test(bench ~ drafted, data = combine_draft_data, alternative = "less")
+
+# vertical jump
+t.test(vertical_jump ~ drafted, data = combine_draft_data, alternative = "less")
+
+# broad jump
+t.test(broad_jump ~ drafted, data = combine_draft_data, alternative = "less")
+
+# shuttle
+t.test(shuttle ~ drafted, data = combine_draft_data, alternative = "greater")
+
+# 3-cone
+t.test(three_cone ~ drafted, data = combine_draft_data, alternative = "greater")
+```
+
+
+
+```{r}
+# conduct a Tukey HSD comparison for NFL Combine performance metrics vs NFL
+# draft round
+
+# check the critical assumptions for ANOVA that the residuals are normally
+# distributed and that the data has equal variance using the Shapiro-Wilkes
+# test and Levene's test, respectively, then conduct a Tukey HSD comparison
+
+# create an empty dataframe to capture the results
+output <- tibble()
+
+# height vs draft position***********************************************
+mod_fit <- aov(height ~ selection_fac, data = combine_draft_data)
+shap <- shapiro.test(mod_fit$residuals)
+leve <- leveneTest(height ~ selection_fac, data = combine_draft_data)
+results <- TukeyHSD(mod_fit)
+comparisons <- rownames(results$selection_fac)
+results <- results$selection_fac
+rownames(results) <- NULL
+results <- data.frame(results)
+results$comparison <- comparisons
+results$test <- "height"
+results$shapiro_p <- shap$p.value[1]
+results$levene_p <- leve$`Pr(>F)`[1]
+results <- results %>% select(test, comparison, p.adj, shapiro_p, levene_p)
+output <- rbind(output, results)
+
+# weight vs draft position***********************************************
+mod_fit <- aov(weight ~ selection_fac, data = combine_draft_data)
+shap <- shapiro.test(mod_fit$residuals)
+leve <- leveneTest(weight ~ selection_fac, data = combine_draft_data)
+results <- TukeyHSD(mod_fit)
+comparisons <- rownames(results$selection_fac)
+results <- results$selection_fac
+rownames(results) <- NULL
+results <- data.frame(results)
+results$comparison <- comparisons
+results$test <- "weight"
+results$shapiro_p <- shap$p.value[1]
+results$levene_p <- leve$`Pr(>F)`[1]
+results <- results %>% select(test, comparison, p.adj, shapiro_p, levene_p)
+output <- rbind(output, results)
+
+# 40yd dash vs draft position********************************************"
+mod_fit <- aov(forty_yd ~ selection_fac, data = combine_draft_data)
+shap <- shapiro.test(mod_fit$residuals)
+leve <- leveneTest(forty_yd ~ selection_fac, data = combine_draft_data)
+results <- TukeyHSD(mod_fit)
+comparisons <- rownames(results$selection_fac)
+results <- results$selection_fac
+rownames(results) <- NULL
+results <- data.frame(results)
+results$comparison <- comparisons
+results$test <- "forty_yd"
+results$shapiro_p <- shap$p.value[1]
+results$levene_p <- leve$`Pr(>F)`[1]
+results <- results %>% select(test, comparison, p.adj, shapiro_p, levene_p)
+output <- rbind(output, results)
+
+# bench press vs draft position******************************************
+mod_fit <- aov(bench ~ selection_fac, data = combine_draft_data)
+shap <- shapiro.test(mod_fit$residuals)
+leve <- leveneTest(bench ~ selection_fac, data = combine_draft_data)
+results <- TukeyHSD(mod_fit)
+comparisons <- rownames(results$selection_fac)
+results <- results$selection_fac
+rownames(results) <- NULL
+results <- data.frame(results)
+results$comparison <- comparisons
+results$test <- "bench"
+results$shapiro_p <- shap$p.value[1]
+results$levene_p <- leve$`Pr(>F)`[1]
+results <- results %>% select(test, comparison, p.adj, shapiro_p, levene_p)
+output <- rbind(output, results)
+
+# vertical jump vs draft position****************************************
+mod_fit <- aov(vertical_jump ~ selection_fac, data = combine_draft_data)
+shap <- shapiro.test(mod_fit$residuals)
+leve <- leveneTest(vertical_jump ~ selection_fac, data = combine_draft_data)
+results <- TukeyHSD(mod_fit)
+comparisons <- rownames(results$selection_fac)
+results <- results$selection_fac
+rownames(results) <- NULL
+results <- data.frame(results)
+results$comparison <- comparisons
+results$test <- "vertical_jump"
+results$shapiro_p <- shap$p.value[1]
+results$levene_p <- leve$`Pr(>F)`[1]
+results <- results %>% select(test, comparison, p.adj, shapiro_p, levene_p)
+output <- rbind(output, results)
+
+# broad jump vs draft position*******************************************
+mod_fit <- aov(broad_jump ~ selection_fac, data = combine_draft_data)
+shap <- shapiro.test(mod_fit$residuals)
+leve <- leveneTest(broad_jump ~ selection_fac, data = combine_draft_data)
+results <- TukeyHSD(mod_fit)
+comparisons <- rownames(results$selection_fac)
+results <- results$selection_fac
+rownames(results) <- NULL
+results <- data.frame(results)
+results$comparison <- comparisons
+results$test <- "broad_jump"
+results$shapiro_p <- shap$p.value[1]
+results$levene_p <- leve$`Pr(>F)`[1]
+results <- results %>% select(test, comparison, p.adj, shapiro_p, levene_p)
+output <- rbind(output, results)
+
+# shuttle run vs draft position******************************************")
+mod_fit <- aov(shuttle ~ selection_fac, data = combine_draft_data)
+shap <- shapiro.test(mod_fit$residuals)
+leve <- leveneTest(shuttle ~ selection_fac, data = combine_draft_data)
+results <- TukeyHSD(mod_fit)
+comparisons <- rownames(results$selection_fac)
+results <- results$selection_fac
+rownames(results) <- NULL
+results <- data.frame(results)
+results$comparison <- comparisons
+results$test <- "shuttle"
+results$shapiro_p <- shap$p.value[1]
+results$levene_p <- leve$`Pr(>F)`[1]
+results <- results %>% select(test, comparison, p.adj, shapiro_p, levene_p)
+output <- rbind(output, results)
+
+# 3-cone vs draft position***********************************************
+mod_fit <- aov(three_cone ~ selection_fac, data = combine_draft_data)
+shap <- shapiro.test(mod_fit$residuals)
+leve <- leveneTest(three_cone ~ selection_fac, data = combine_draft_data)
+results <- TukeyHSD(mod_fit)
+comparisons <- rownames(results$selection_fac)
+results <- results$selection_fac
+rownames(results) <- NULL
+results <- data.frame(results)
+results$comparison <- comparisons
+results$test <- "three_cone"
+results$shapiro_p <- shap$p.value[1]
+results$levene_p <- leve$`Pr(>F)`[1]
+results <- results %>% select(test, comparison, p.adj, shapiro_p, levene_p)
+output <- rbind(output, results)
+```
+
+
+```{r}
+# view the comparisons where p-value <= 0.05 
+output %>% filter(p.adj <= 0.0500)
+```
+
+
+```{r}
+# wrangle data for classification modeling
+
+# isolate the dependent and independent variables, and create dataframes for use
+# in separate binomial and multinomial regression models
+data <- combine_draft_data %>% 
+  select(-c(last_name, first_name, college, selection, conference,
+            draft_position))
+
+# create a dataframe with a binomial response variable and remove all NAs
+data_bi <- data %>% 
+  select(-c(selection_fac))
+data_bi <- data_bi %>% drop_na()
+
+# create a dataframe with a multinomial response variable and remove all NAs
+data_multi <- data %>% 
+  select(-c(drafted))
+data_multi <- data_multi %>% drop_na()
+```
+
+
+```{r}
+# full binomial model
+
+# use 5-fold cross-validation to train and test a binomial logistic regression model
+# define training control
+train_control <- trainControl(method = "cv", number = 5)
+
+# train the model
+model_bi_full <- train(drafted ~ ., data = data_bi, trControl = train_control,
+                       method = "glm", family=binomial())
+
+# view results
+summary(model_bi_full)
+model_bi_full$results
+round((exp(coef(model_bi_full$finalModel)) - 1) * 100, 2)
+```
+
+
+```{r}
+# parsimonious binomial model
+
+# based on the results of the full model, manually remove insignificant independent
+# variables to determine if a more parsimonious model improves the AIC and
+# accuracy scores
+
+# use 5-fold cross-validation to train and test a binomial logistic regression model
+# define training control
+train_control <- trainControl(method = "cv", number = 5)
+
+# train the model
+model_bi_par <- train(drafted ~ . - height - bench - broad_jump - three_cone - vertical_jump,
+                      data = data_bi, trControl = train_control, method = "glm",
+                      family=binomial())
+
+# view results
+summary(model_bi_par)
+model_bi_par$results
+round((exp(coef(model_bi_par$finalModel)) - 1) * 100, 2)
+```
+
+
+```{r}
+# full multinomial model
+
+# use 5-fold cross-validation to train and test a multinomial regression model
+# define training control
+train_control <- trainControl(method = "cv", number = 5)
+
+# train the model
+model_multi_full <- train(selection_fac ~ ., data = data_multi, trControl = train_control,
+                          method = "multinom")
+
+# view results
+summary(model_multi_full)
+model_multi_full$results
+```
+
+
+```{r}
+# parsimonious multinomial model
+
+# use the same independent variables used in the parsimounious binomial model
+# to determine if a more parsimonious model improves the AIC and accuracy scores
+
+# use 5-fold cross-validation to train and test a multinomial regression model
+# define training control
+train_control <- trainControl(method = "cv", number = 5)
+
+# train the model
+model_multi_par <- train(selection_fac ~ . - height - bench - broad_jump - three_cone
+                         - vertical_jump, data = data_multi, trControl = train_control,
+                         method = "multinom")
+
+# view results
+summary(model_multi_par)
+model_multi_par$results
+```
